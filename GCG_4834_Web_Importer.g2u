@@ -1,0 +1,294 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+'GSS Connection
+F.ODBC.Connection!con.OpenConnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass) 
+'check dirs first for web importer
+Function.Intrinsic.Control.CallSub(check_dir)
+'ask user to select excel file 'create table
+Function.Intrinsic.Control.CallSub(get_data)
+'single out parts that dne in Global Shop and create error log, create O table for web importer
+Function.Intrinsic.Control.CallSub(split_data)
+'create the file for the web importer
+Function.Intrinsic.Control.CallSub(create_file)
+'upload the files
+Function.Intrinsic.Control.CallSub(upload)
+'close it down
+Function.Intrinsic.Control.CallSub(unload)
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Check_Dir.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+V.Local..BulkDeclareString(sDir, sSubDir)
+V.Local.i.Declare(Long)
+V.Local.bExists.Declare(Boolean)
+
+'Files\WEB_ORDERS 
+F.Intrinsic.String.Build("{0}\WEB_ORDERS",v.Caller.FilesDir,v.Local.sDir) 
+F.Intrinsic.File.DirExists(v.Local.sDir,v.Local.bExists) 
+F.Intrinsic.Control.If(v.Local.bExists,=,False) 
+	f.Intrinsic.File.CreateDir(v.Local.sDir) 
+Function.Intrinsic.Control.EndIf
+F.Intrinsic.String.Split("PART_ERRORS*!*UPLOADED*!*WEB_ERRORS","*!*",v.Local.sSubDir) 
+F.Intrinsic.Control.For(v.Local.i,0,v.Local.sSubDir.UBound,1) 
+	F.Intrinsic.String.Build("{0}\{1}",v.Local.sDir,v.Local.sSubDir(v.Local.i).Trim,v.Local.sSubDir(v.Local.i)) 
+	f.Intrinsic.File.DirExists(v.Local.sSubDir(v.Local.i),v.Local.bExists) 
+	F.Intrinsic.Control.If(v.Local.bExists,=,False) 
+		f.Intrinsic.File.CreateDir(v.Local.sSubDir(v.Local.i)) 
+	Function.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(v.Local.i) 
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Check_Dir.End
+
+Program.Sub.Get_Data.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+V.Local.iC.Declare(Long)
+V.Local..BulkDeclareString(sFile, sData, sTypes, sFields, sTemp)
+
+Function.Intrinsic.UI.ShowOpenFileDialog("", "*xls","",V.Local.sFile) 
+F.Intrinsic.Control.If(V.Local.sFile, = ,"***CANCEL***")
+	F.Intrinsic.UI.Msgbox("No File Selected")
+	Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndIf
+
+F.Automation.MSExcel.ReadSpreadsheet(V.Local.sFile, V.Local.sData)
+
+'delete empty rows
+F.Intrinsic.String.Replace(V.Local.sData, "$!$*!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!**!*", "", V.Local.sData)
+
+V.Local.sTypes.Set("String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String")
+V.Local.sFields.Set("CustomerPO*!**!*PartNumber*!**!*Part Description*!**!**!*CustomerNumber*!**!*OrderQty*!**!*PartRevision*!**!**!*LineUserField2*!**!**!*PromisedDate*!**!**!*LineUserField1*!**!*UserField5Line")
+F.Data.DataTable.CreateFromString("T", V.Local.sData, V.Local.sFields , V.Local.sTypes,"*!*", "$!$", TRUE)
+
+'remove columns
+F.Intrinsic.Control.For(V.Local.iC, 1, 13, 1)
+	F.Intrinsic.String.Build("Column{0}", V.Local.iC, V.Local.sTemp)
+	F.Data.DataTable.RemoveColumn("T", V.Local.sTemp)
+F.Intrinsic.Control.Next(V.Local.iC)
+
+'delete first 2 rows
+F.Data.DataTable.DeleteRow("T", 0)
+F.Data.DataTable.DeleteRow("T", 0)
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)	
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Get_Data.End
+
+Program.Sub.Split_Data.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+V.Local..BulkDeclareString(sRet, sPath)
+V.Local..BulkDeclareLong(iC, iU)
+
+'File Path For Parts DNE
+F.Intrinsic.String.Replace(V.Ambient.Now," ", "",V.Local.sRet)
+F.Intrinsic.String.Replace(V.Local.sRet,"/", "_",V.Local.sRet)
+F.Intrinsic.String.Replace(V.Local.sRet,":", "_",V.Local.sRet)
+
+F.Intrinsic.String.Build("{0}\WEB_ORDERS\PART_ERRORS\{1}.txt",V.Caller.FilesDir, V.Local.sRet,V.Local.sPath)
+
+'add column and fill from dictionary parts in GSS
+'F.Data.DataTable.AddExpressionColumn("T", "PartRev", "String", "Substring(PartRevision, 2, 3) " )
+F.Data.DataTable.AddExpressionColumn("T", "PartRev", "String", "Substring(PartRevision, 4, 1) " )
+
+F.Data.DataTable.AddColumn("T", "Part", "string")
+
+F.Intrinsic.Control.For(V.Local.iC, 0, V.DataTable.T.RowCount--, 1)
+	Function.Intrinsic.String.GSSPARTSTRING(V.DataTable.T(V.Local.iC).PartNumber!FieldValTrim, V.DataTable.T(V.Local.iC).PartRev!FieldValTrim, V.Local.sRet)
+	F.Data.DataTable.SetValue("T", V.Local.iC, "Part", V.Local.sRet)
+F.Intrinsic.Control.Next(V.Local.iC)
+
+F.Data.DataTable.AddColumn("T", "PartGSS", "string")
+F.Data.Dictionary.CreateFromSQL("dict", "con", "Select Part as PartNumber, Part As PartGSS From Inventory_MSTR Order by Part")
+F.Data.Dictionary.SetDefaultReturn("dict", "")
+F.Data.Datatable.FillFromDictionary("T", "dict", "Part", "PartGSS")
+F.Data.Dictionary.Close("dict")
+
+'select to view where PartGSS = ''  these parts dne in GSS
+F.Data.DataView.Create("T","T_DNE", 22,  "PartGSS =  '' ", "")
+'write error file for parts
+V.Local.sRet.Set("")
+'why it did not work in the function we may never know
+V.Local.iU.Set(V.DataView.T!T_DNE.RowCount--)
+F.Intrinsic.Control.For(V.Local.iC, 0, V.Local.iU, 1)
+	Function.Intrinsic.String.Build("{0}{1},{2},{3}{4}", V.Local.sRet, V.DataView.T!T_DNE(V.Local.iC).PartNumber!FieldValTrim, V.DataView.T!T_DNE(V.Local.iC).PartRevision!FieldValTrim, V.DataView.T!T_DNE(V.Local.iC).CustomerPO!FieldValTrim,V.Ambient.NewLine,V.Local.sRet)	
+F.Intrinsic.Control.Next(V.Local.iC)
+
+F.Intrinsic.File.String2File(V.Local.sPath,V.Local.sRet)
+
+'select to view where part exists in GSS- 
+F.Data.DataView.Create("T","T_ORDER", 22,  "PartGSS <>  ''", "")
+'create table from view
+F.Data.DataView.ToDataTable("T","T_ORDER","Order", True)
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)	
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Split_Data.End
+
+Program.Sub.Create_File.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+Function.Intrinsic.Control.If(V.DataTable.Order.RowCount, =, 0)
+	Function.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+V.Local..BulkDeclareLong(iC, iOrder)
+V.Local..BulkDeclareString(sTemp, sLine, sFilter, sFull, sOrder,sFileName, sPath)
+'create distinct orders list
+Function.Data.DataView.ToDataTableDistinct("T","T_ORDER"," OrderList", "CustomerPO", True)
+
+F.Intrinsic.Control.For(V.Local.iC, 0, V.DataTable.OrderList.RowCount--, 1)
+	'select to view where order number = V.DataTable.OrderList(V.Local.iC).CustomerPO!FieldValTrim
+	F.Intrinsic.String.Build("[CustomerPO] = '{0}'", V.DataTable.Order(v.Local.iC).CustomerPO!Fieldvaltrim, V.local.sFilter)
+	F.Data.DataView.Create("Order", "Order_V", 22, V.Local.sFilter, "")
+	'loop through to create files for orders
+	F.Intrinsic.Control.For(V.Local.iOrder, 0, V.DataView.Order!Order_V.Rowcount--, 1)
+	
+		'customer
+		'F.Intrinsic.String.RPad(V.DataView.Order!Order_V(V.Local.iOrder).Customer!Fieldvaltrim," ",7, V.Local.sTemp)
+		F.Intrinsic.String.RPad("W003"," ",7, V.Local.sTemp)
+		F.Intrinsic.String.Build("O{0}",V.Local.sTemp,V.Local.sLine)
+		'order number
+		F.Intrinsic.String.LPad(V.DataView.Order!Order_V(V.Local.iOrder).CustomerPO!Fieldvaltrim,"0",7, V.Local.sOrder)
+		'F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sOrder,V.local.sLine) 
+		
+		'order date
+		F.Intrinsic.String.RPad(V.Local.sLine," ",35,v.Local.sLine)
+		F.Intrinsic.String.Format(V.Ambient.Date,"YYYYMMDD",V.Local.sTemp)
+		'create file name here
+		F.Intrinsic.String.Build("{0}_{1}.txt",V.DataView.Order!Order_V(V.Local.iOrder).CustomerPO!Fieldvaltrim, V.Local.sTemp,V.Local.sFileName)	
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sTemp,V.Local.sLine)
+		
+		'customer PO
+		F.Intrinsic.String.RPad(V.local.sLine," ",201, V.Local.sLine)
+		F.Intrinsic.String.RPad(V.DataView.Order!Order_V(V.Local.iOrder).CustomerPO!Fieldvaltrim," ",15, V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sTemp,V.local.sLine) 
+		
+		'QTY
+		F.Intrinsic.String.RPad(V.local.sLine," ",705, V.Local.sLine)
+		F.Intrinsic.String.Split(V.DataView.Order!Order_V(V.Local.iOrder).OrderQty!FieldvalTrim,".",V.Local.sTemp)
+		Function.Intrinsic.Control.If(v.Local.sTemp.UBound,<,1) 
+			'no decimal 
+			F.Intrinsic.String.LPad(V.Local.sTemp(0).Trim,"0",9,V.Local.sTemp(0)) 
+			F.Intrinsic.String.RPad(V.Local.sTemp(0).Trim,"0",13,V.Local.sTemp(0)) 
+		Function.Intrinsic.Control.Else 
+			F.Intrinsic.String.LPad(V.Local.sTemp(0).Trim,"0",9,V.Local.sTemp(0)) 
+			F.Intrinsic.String.RPad(V.Local.sTemp(1).Trim,"0",4,V.Local.sTemp(1))
+			F.Intrinsic.String.Join(V.Local.sTemp,"",v.Local.sTemp)
+		Function.Intrinsic.Control.EndIf
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sline,V.Local.sTemp,V.Local.sline)
+			
+		'PART	
+		F.Intrinsic.String.RPad(V.Local.sLine, " ", 730, V.Local.sLine)
+		F.Intrinsic.String.RPad(V.DataView.Order!Order_V(V.Local.iOrder).Part!Fieldvaltrim," ",20, V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sTemp,V.local.sLine)
+				
+		'item_due date: DATE ITEM Prom
+		F.Intrinsic.String.RPad(V.Local.sLine, " ", 859, V.Local.sLine)
+		V.Local.sTemp.Set(V.DataView.Order!Order_V(V.Local.iOrder).PromisedDate!Fieldvaltrim)
+		F.Intrinsic.String.Format(V.Local.sTemp,"YYYYMMDD",V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.Local.sLine,V.Local.sTemp,V.Local.sLine)
+			
+		'line data
+		'user 1
+		F.Intrinsic.String.RPad(V.Local.sLine, " ",867, V.Local.sLine)
+		F.Intrinsic.String.RPad(V.DataView.Order!Order_V(V.Local.iOrder).LineUserField1!Fieldvaltrim," ",30, V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sTemp,V.local.sLine)
+		'user 2
+		F.Intrinsic.String.RPad(V.Local.sLine, " ",897, V.Local.sLine)
+		F.Intrinsic.String.RPad(V.DataView.Order!Order_V(V.Local.iOrder).LineUserField2!Fieldvaltrim," ",30, V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sTemp,V.local.sLine)
+		'user 5
+		F.Intrinsic.String.RPad(V.Local.sLine, " ",987, V.Local.sLine)
+		F.Intrinsic.String.LPad(V.DataView.Order!Order_V(V.Local.iOrder).UserField5Line!Fieldvaltrim,"0",3, V.Local.sTemp)
+		F.Intrinsic.String.RPad(V.Local.sTemp," ",30, V.Local.sTemp)
+		F.Intrinsic.String.Build("{0}{1}",V.local.sLine,V.Local.sTemp,V.local.sLine)
+			
+		F.Intrinsic.String.RPad(v.Local.sLine," ",4636,v.Local.sLine)
+		F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sFull,V.Local.sLine,V.Ambient.NewLine,V.Local.sFull) 
+	
+	F.Intrinsic.Control.Next(V.Local.iOrder)	
+	'close the dataview for the lines 
+	F.Data.DataView.Close("Order", "Order_V")	
+	'create the complete file for this order
+	F.Intrinsic.String.Build("{0}\Web_Orders\{1}",V.Caller.FilesDir,V.Local.sFileName,V.Local.sPath)
+	F.Intrinsic.File.String2File(V.Local.sPath,V.Local.sFull)
+	'reset sFull
+	V.Local.sFull.Set("")	
+F.Intrinsic.Control.Next(V.Local.iC)
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.Create_File.End
+
+Program.Sub.UPLOAD.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+Function.Intrinsic.Control.If(V.DataTable.Order.RowCount, =, 0)
+	Function.Intrinsic.Control.ExitSub
+Function.Intrinsic.Control.EndIf
+
+V.Local.sParams.Declare(String) 
+'Call ORDUPL to upload sales orders created, it will process all txt files created by this program.
+'if ORDUPL encounters an error, it will move the file to the ERRORS folder designated in GLOBAL\FILES\GSSPARAM.txt or GSSPARAMccc.txt
+
+F.Intrinsic.String.Build("{0}!*!ORDUPL",V.Caller.CompanyCode,V.Local.sParams)
+F.Global.General.CallWrapperSync(51,V.Local.sParams)
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)
+    Function.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.UPLOAD.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+'close connection
+Function.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+    F.Intrinsic.String.Build("Project: GCG_4834_Web_Importer: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+    F.Intrinsic.UI.Msgbox(V.Local.sError)
+    Function.Intrinsic.Control.End
+
+F.Intrinsic.Control.EndTry
+Program.Sub.Unload.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$12:00:00 AM$}$False
+Program.Sub.Comments.End
